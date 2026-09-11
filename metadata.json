@@ -1,0 +1,7 @@
+{
+  "name": "ScriptForge AI",
+  "description": "AI YouTube Script Studio for creators to turn spoken thoughts and ideas into polished, properly structured YouTube scripts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
