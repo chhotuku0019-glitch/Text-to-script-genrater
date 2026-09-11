@@ -565,23 +565,52 @@ fun SpeechRecordScreen(
                                         fontSize = 13.sp
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = {
-                                            viewModel.cleanTranscriptAi(
-                                                projectId = targetProjectId ?: 0L,
-                                                rawTranscript = fullText,
-                                                language = selectedLanguage
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = {
+                                                viewModel.cleanTranscriptAi(
+                                                    projectId = targetProjectId ?: 0L,
+                                                    rawTranscript = fullText,
+                                                    language = selectedLanguage,
+                                                    autoOpenEditor = false,
+                                                    onSuccess = { cleaned, _ ->
+                                                        cleanTranscriptText = cleaned
+                                                    }
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = PurpleAccent,
+                                                contentColor = Color.White
                                             )
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = PurpleAccent,
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.AutoAwesome, contentDescription = "Clean", modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("✨ Clean Transcript Now", fontWeight = FontWeight.Bold)
+                                        ) {
+                                            Icon(Icons.Default.AutoAwesome, contentDescription = "Clean", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("✨ Clean Text", fontWeight = FontWeight.Bold)
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                viewModel.cleanTranscriptAi(
+                                                    projectId = targetProjectId ?: 0L,
+                                                    rawTranscript = fullText,
+                                                    language = selectedLanguage,
+                                                    autoOpenEditor = true,
+                                                    onSuccess = { cleaned, _ ->
+                                                        cleanTranscriptText = cleaned
+                                                    }
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = RedPrimary,
+                                                contentColor = Color.White
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.AutoAwesome, contentDescription = "Clean & Open", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("✨ Clean & Edit in Script Editor", fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             } else {
@@ -601,6 +630,29 @@ fun SpeechRecordScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Button(
+                                    onClick = {
+                                        viewModel.cleanTranscriptAi(
+                                            projectId = targetProjectId ?: 0L,
+                                            rawTranscript = fullText,
+                                            language = selectedLanguage,
+                                            autoOpenEditor = true
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = RedPrimary,
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Open", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open in Project Script Editor", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 

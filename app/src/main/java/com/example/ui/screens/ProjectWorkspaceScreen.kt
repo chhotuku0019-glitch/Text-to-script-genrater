@@ -224,7 +224,7 @@ fun ProjectWorkspaceScreen(
         Box(modifier = Modifier.weight(1f)) {
             when (selectedTab) {
                 0 -> OverviewTab(viewModel, project, onSelectTab = { selectedTab = it })
-                1 -> TranscriptTab(viewModel, project)
+                1 -> TranscriptTab(viewModel, project, onOpenScriptEditor = { selectedTab = 2 })
                 2 -> ScriptEditorTab(viewModel, project, saveStatus)
                 3 -> AiStudioToolsTab(viewModel, project)
                 4 -> HistoryVersionsTab(
@@ -633,7 +633,8 @@ fun QuickActionButton(
 @Composable
 fun TranscriptTab(
     viewModel: MainViewModel,
-    project: ProjectEntity
+    project: ProjectEntity,
+    onOpenScriptEditor: () -> Unit = {}
 ) {
     var rawText by remember(project.rawTranscript) { mutableStateOf(project.rawTranscript) }
     var cleanText by remember(project.cleanTranscript) { mutableStateOf(project.cleanTranscript) }
@@ -673,7 +674,13 @@ fun TranscriptTab(
                                 if (rawText.isBlank()) {
                                     viewModel.showMessage("Please record or write a transcript first.")
                                 } else {
-                                    viewModel.cleanTranscriptAi(project.id, rawText, project.language)
+                                    viewModel.cleanTranscriptAi(
+                                        projectId = project.id,
+                                        rawTranscript = rawText,
+                                        language = project.language,
+                                        autoOpenEditor = true
+                                    )
+                                    onOpenScriptEditor()
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
@@ -683,7 +690,7 @@ fun TranscriptTab(
                             ),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("✨ Clean Transcript", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("✨ Clean & Edit in Script Editor", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         Button(
@@ -726,11 +733,24 @@ fun TranscriptTab(
                             color = GreenSuccess,
                             letterSpacing = 1.sp
                         )
-                        Text(
-                            text = "Words: ${cleanText.split(Regex("\\s+")).filter { it.isNotBlank() }.size}",
-                            color = TextMuted,
-                            fontSize = 11.sp
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Words: ${cleanText.split(Regex("\\s+")).filter { it.isNotBlank() }.size}",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                            if (cleanText.isNotBlank()) {
+                                Button(
+                                    onClick = onOpenScriptEditor,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant, contentColor = TextPrimary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("Open Editor", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
@@ -1052,6 +1072,7 @@ fun AiStudioToolsTab(
 
     val subTools = listOf(
         "Rewrites" to "✨ AI Rewriter",
+        "FunZone" to "🎭 Creator Fun Zone",
         "Hooks" to "🎣 8 Hooks",
         "Titles" to "🏷️ 10 Titles",
         "Description" to "📝 Description",
@@ -1093,6 +1114,7 @@ fun AiStudioToolsTab(
         Box(modifier = Modifier.weight(1f)) {
             when (activeSubTool) {
                 "Rewrites" -> RewritesSubTool(viewModel, project)
+                "FunZone" -> FunZoneSubTool(viewModel, project, clipboardManager)
                 "Hooks" -> HooksSubTool(viewModel, project, clipboardManager)
                 "Titles" -> TitlesSubTool(viewModel, project, clipboardManager)
                 "Description" -> DescriptionSubTool(viewModel, project, clipboardManager)
@@ -2261,5 +2283,324 @@ fun HistoryVersionsTab(
                 }
             }
         }
+    }
+}
+
+// -------------------------------------------------------------
+// 1b. Creator Fun Zone (Meme, Comedy & Viral Tools)
+// -------------------------------------------------------------
+data class FunCreatorTool(
+    val id: String,
+    val name: String,
+    val iconEmoji: String,
+    val tag: String,
+    val tagColor: Color,
+    val description: String,
+    val exampleSnippet: String
+)
+
+@Composable
+fun FunZoneSubTool(
+    viewModel: MainViewModel,
+    project: ProjectEntity,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    val funnyResult by viewModel.funnyToolResult.collectAsState()
+    var showReplaceConfirmation by remember { mutableStateOf(false) }
+
+    val funTools = listOf(
+        FunCreatorTool(
+            id = "Meme Mode",
+            name = "Meme Mode",
+            iconEmoji = "🔥",
+            tag = "VIRAL POP CULTURE",
+            tagColor = RedPrimary,
+            description = "Infuses relatable modern internet memes, punchlines, and pop culture references.",
+            exampleSnippet = "e.g. \"API ne bola: bhai aaj nahi. 💀\""
+        ),
+        FunCreatorTool(
+            id = "Bhai Moment",
+            name = "Bhai Moment",
+            iconEmoji = "🤝",
+            tag = "DESI CREATOR HUMOR",
+            tagColor = AmberAccent,
+            description = "Relatable everyday struggle, brotherly banter, and Hinglish punchlines.",
+            exampleSnippet = "e.g. \"Sun bhai, code likhna aasan tha... deploy karna nahi.\""
+        ),
+        FunCreatorTool(
+            id = "Roast My Script",
+            name = "Roast My Script",
+            iconEmoji = "🌶️",
+            tag = "SAVAGE COMEDY ROAST",
+            tagColor = PurpleAccent,
+            description = "Lighthearted, hilarious roast of your clichés, tropes, and cringe transitions with funny fixes.",
+            exampleSnippet = "Roast breakdown: Brutal critique + Cringe Radar + Fixes."
+        ),
+        FunCreatorTool(
+            id = "Comedy Boost",
+            name = "Comedy Boost",
+            iconEmoji = "😂",
+            tag = "STAND-UP TIMING",
+            tagColor = BlueAccent,
+            description = "Injects stand-up comedy pacing, unexpected funny analogies, callbacks, and one-liners.",
+            exampleSnippet = "Elevates punchlines without derailing your educational content."
+        ),
+        FunCreatorTool(
+            id = "Brainrot Mode",
+            name = "Brainrot Mode",
+            iconEmoji = "🧠",
+            tag = "GEN-Z / SHORTS SLANG",
+            tagColor = GreenSuccess,
+            description = "Infuses playful viral slang (cooking, no cap, rizz, sigma lore, gigachad) for viral shorts.",
+            exampleSnippet = "e.g. \"Bro really thought he could fix the bug in production. 😭\""
+        ),
+        FunCreatorTool(
+            id = "Reaction Generator",
+            name = "Reaction & SFX Generator",
+            iconEmoji = "🎬",
+            tag = "MEME SOUNDS & CUES",
+            tagColor = AmberAccent,
+            description = "Generates funny face reactions, zoom-in cues, and sound effect tags ([Vine Boom], [Awkward Pause]).",
+            exampleSnippet = "Includes cues like [Record Scratch], [Emotional Damage SFX]."
+        ),
+        FunCreatorTool(
+            id = "Expectation vs Reality",
+            name = "Expectation vs Reality",
+            iconEmoji = "🎭",
+            tag = "COMEDY SEGMENT",
+            tagColor = PurpleAccent,
+            description = "Creates a hilarious side-by-side comedy segment comparing tutorial hype vs real-life pain.",
+            exampleSnippet = "Generates ✨ Expectation vs 💀 Reality on-camera script."
+        ),
+        FunCreatorTool(
+            id = "Shorts Punchline",
+            name = "Shorts Punchlines",
+            iconEmoji = "⚡",
+            tag = "MIC-DROP CLOSERS",
+            tagColor = RedPrimary,
+            description = "5 ultra-punchy, high-retention comedic closing lines tailored for YouTube Shorts.",
+            exampleSnippet = "Quick punchy lines to maximize replay loops."
+        ),
+        FunCreatorTool(
+            id = "Deadpan Mode",
+            name = "Deadpan Sarcasm",
+            iconEmoji = "😐",
+            tag = "DRY MONOTONE HUMOR",
+            tagColor = BlueAccent,
+            description = "Rewrites with brutally dry, emotionless sarcastic delivery.",
+            exampleSnippet = "Delivers absurd truths with complete straight-faced composure."
+        ),
+        FunCreatorTool(
+            id = "Savage But Friendly",
+            name = "Savage But Friendly",
+            iconEmoji = "😈",
+            tag = "PLAYFUL TEASING",
+            tagColor = AmberAccent,
+            description = "Delightfully savage commentary and playful banter that keeps the audience hooked and smiling.",
+            exampleSnippet = "Playful viewer roasts with warm creator energy."
+        )
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, PurpleAccent.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🎭 CREATOR FUN ZONE & MEME TOOLS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PurpleAccent,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Inject stand-up comedy, viral pop-culture memes, funny sound-effect cues, and witty roasts into your YouTube scripts.",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
+        items(funTools) { tool ->
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, DarkBorder, RoundedCornerShape(14.dp))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text(text = tool.iconEmoji, fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = tool.name,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                )
+                                Text(
+                                    text = tool.tag,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tool.tagColor
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.applyFunCreatorToolAi(project.id, tool.id)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = DarkSurfaceVariant,
+                                contentColor = RedPrimary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Generate ✨", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = tool.description, fontSize = 12.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = tool.exampleSnippet, fontSize = 11.sp, color = TextMuted, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                }
+            }
+        }
+    }
+
+    // Output Result Dialog / Preview Card
+    if (funnyResult != null) {
+        val (toolName, content) = funnyResult!!
+
+        AlertDialog(
+            onDismissRequest = { viewModel.clearFunnyToolResult() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "🎭 $toolName Output", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(340.dp)
+                ) {
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = DarkSurfaceVariant,
+                            unfocusedContainerColor = DarkSurfaceVariant,
+                            focusedBorderColor = PurpleAccent,
+                            unfocusedBorderColor = DarkBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(content))
+                            viewModel.showMessage("Copied to clipboard!")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant, contentColor = TextPrimary),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Copy", fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            viewModel.applyFunnyResultToScript(project.id, toolName, content, replaceAll = false)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PurpleAccent, contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Append", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            showReplaceConfirmation = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary, contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Replace", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.clearFunnyToolResult() }) {
+                    Text("Close", color = TextSecondary)
+                }
+            },
+            containerColor = DarkCard
+        )
+    }
+
+    // Confirmation for full replacement
+    if (showReplaceConfirmation && funnyResult != null) {
+        val (toolName, content) = funnyResult!!
+        AlertDialog(
+            onDismissRequest = { showReplaceConfirmation = false },
+            title = { Text("Replace Entire Script?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "Your current script will be replaced with the $toolName version. ScriptForge AI will automatically save a backup of your previous version in the History & Drafts tab.",
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.applyFunnyResultToScript(project.id, toolName, content, replaceAll = true)
+                        showReplaceConfirmation = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("Yes, Replace & Backup")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReplaceConfirmation = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = DarkCard
+        )
     }
 }

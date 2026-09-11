@@ -3,6 +3,8 @@ package com.example.speech
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -16,6 +18,9 @@ class SpeechManager(private val context: Context) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
     private var targetLanguage: String = "en-IN" // default hinglish/indian english
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var restartRunnable: Runnable? = null
+    private var lastRestartTime = 0L
 
     fun setLanguage(language: String) {
         targetLanguage = when (language.lowercase()) {
@@ -26,36 +31,86 @@ class SpeechManager(private val context: Context) {
         }
     }
 
+    private fun buildRecognizerIntent(): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, targetLanguage)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            // Lengthen silence thresholds so it does not disconnect every few seconds
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 10000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
+        }
+    }
+
     fun startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             Log.w("SpeechManager", "Speech recognition not available on this device")
             return
         }
 
-        stopListening(resetState = false)
+        cancelPendingRestart()
+        isListening = true
 
         try {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(createListener())
+            if (speechRecognizer == null) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(createListener())
+                }
             }
 
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, targetLanguage)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-            }
-
-            isListening = true
-            speechRecognizer?.startListening(intent)
+            speechRecognizer?.startListening(buildRecognizerIntent())
+            lastRestartTime = System.currentTimeMillis()
         } catch (e: Exception) {
             Log.e("SpeechManager", "Failed to start speech recognizer", e)
         }
     }
 
+    private fun safeRestart(delayMillis: Long = 400L) {
+        if (!isListening || RecordingStateHolder.state.value.status != RecordingStatus.RECORDING) {
+            return
+        }
+
+        cancelPendingRestart()
+        restartRunnable = Runnable {
+            if (!isListening || RecordingStateHolder.state.value.status != RecordingStatus.RECORDING) return@Runnable
+
+            val now = System.currentTimeMillis()
+            if (now - lastRestartTime < 300) {
+                // Throttle rapid loops
+                return@Runnable
+            }
+            lastRestartTime = now
+
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.startListening(buildRecognizerIntent())
+            } catch (e: Exception) {
+                Log.e("SpeechManager", "Error in safeRestart, recreating recognizer", e)
+                try {
+                    speechRecognizer?.destroy()
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                        setRecognitionListener(createListener())
+                        startListening(buildRecognizerIntent())
+                    }
+                } catch (ex: Exception) {
+                    Log.e("SpeechManager", "Failed to recreate speech recognizer", ex)
+                }
+            }
+        }
+        mainHandler.postDelayed(restartRunnable!!, delayMillis)
+    }
+
+    private fun cancelPendingRestart() {
+        restartRunnable?.let { mainHandler.removeCallbacks(it) }
+        restartRunnable = null
+    }
+
     fun pauseListening() {
         isListening = false
+        cancelPendingRestart()
         try {
             speechRecognizer?.stopListening()
         } catch (e: Exception) {
@@ -65,6 +120,7 @@ class SpeechManager(private val context: Context) {
 
     fun stopListening(resetState: Boolean = true) {
         isListening = false
+        cancelPendingRestart()
         try {
             speechRecognizer?.stopListening()
             speechRecognizer?.cancel()
@@ -102,13 +158,15 @@ class SpeechManager(private val context: Context) {
 
             override fun onError(error: Int) {
                 Log.w("SpeechManager", "Speech recognition error: $error")
-                // If user is still actively in RECORDING status, restart automatically to achieve continuous dictation
+                // Non-critical errors like speech timeout (6), no match (7), or busy (8) are restarted gracefully with delay
                 if (isListening && RecordingStateHolder.state.value.status == RecordingStatus.RECORDING) {
-                    try {
-                        startListening()
-                    } catch (e: Exception) {
-                        Log.e("SpeechManager", "Error restarting listener", e)
+                    val delay = when (error) {
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 400L
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 600L
+                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 1200L
+                        else -> 500L
                     }
+                    safeRestart(delay)
                 }
             }
 
@@ -118,10 +176,11 @@ class SpeechManager(private val context: Context) {
                     val bestMatch = matches[0]
                     RecordingStateHolder.appendTranscript(bestMatch)
                 }
+                RecordingStateHolder.updateInterimText("")
 
-                // Restart for continuous recording if still active
+                // Seamlessly continue recording without rapid start/stop beeps
                 if (isListening && RecordingStateHolder.state.value.status == RecordingStatus.RECORDING) {
-                    startListening()
+                    safeRestart(300L)
                 }
             }
 

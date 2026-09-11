@@ -309,6 +309,78 @@ class GeminiService(
         return executeGeminiPrompt(prompt, systemInstruction)
     }
 
+    // 4b. Creator Fun Zone & Meme AI Tools
+    suspend fun applyFunTool(
+        toolName: String,
+        currentScript: String,
+        language: String
+    ): Result<String> {
+        val instruction = when (toolName) {
+            "Meme Mode" -> """
+                Infuse this YouTube script with hilarious modern internet memes, relatable creator humor, emoji punchlines, and viral pop-culture references (e.g., 'API ne bola: bhai aaj nahi. 💀').
+                Keep the core information intact while making it laugh-out-loud relatable.
+            """.trimIndent()
+
+            "Bhai Moment" -> """
+                Add classic relatable 'Bhai Moment' desi/Hinglish creator humor — the struggle, the overconfidence, the realization, relatable everyday pain points, and conversational 'Arre bhai...', 'Sun bhai...' comedic flavor.
+            """.trimIndent()
+
+            "Roast My Script" -> """
+                Perform a hilarious, witty, lighthearted comedy roast of this script!
+                Point out cheesy clichés, overused tropes, cringe transitions, and obvious fluff in a playfully brutal yet lovingly helpful YouTuber manner.
+                Break down:
+                🔥 THE BRUTAL ROAST (Funny critiques)
+                💀 CRINGE RADAR (Overused phrases)
+                💡 HOW TO FIX IT (Actionable punchy edits)
+            """.trimIndent()
+
+            "Comedy Boost" -> """
+                Inject stand-up quality comedic timing, humorous analogies, unexpected punchy callbacks, and witty one-liners into this script to keep viewers grinning throughout.
+            """.trimIndent()
+
+            "Brainrot Mode" -> """
+                Infuse playful Gen-Z / internet brainrot slang (e.g. cooking, no cap, rizz, sigma, emotional damage, lore, gigachad, bro really thought) in a fun, tasteful way tailored for high-engagement viral YouTube Shorts / meme breakdowns.
+            """.trimIndent()
+
+            "Reaction Generator" -> """
+                Analyze this script and generate a comprehensive cue-sheet of hilarious visual reactions, meme sound effects ([Vine Boom], [Record Scratch], [Awkward Pause 2s], [Emotional Damage SFX], [Bruh Sound Effect]), face zoom-ins, and meme video cutaway cues alongside key script lines.
+            """.trimIndent()
+
+            "Expectation vs Reality" -> """
+                Create a hilarious 'Expectation vs Reality' comedy segment based on this topic — contrasting what beginners or gurus think happens vs what actually goes down in real life.
+                Format clearly with:
+                ✨ EXPECTATION (What you thought would happen)
+                💀 REALITY (What actually happens)
+                🎬 HOW TO DELIVER ON CAMERA
+            """.trimIndent()
+
+            "Shorts Punchline" -> """
+                Generate 5 ultra-punchy, viral comedic closing lines and mic-drop punchlines tailored for YouTube Shorts & Reels retention loops.
+            """.trimIndent()
+
+            "Deadpan Mode" -> """
+                Rewrite this script with an iconic deadpan, monotone, brutally dry sarcastic humor style — delivering wild or absurd facts with total straight-faced seriousness.
+            """.trimIndent()
+
+            "Savage But Friendly" -> """
+                Add delightfully savage, witty banter and playful roasts of the viewer or common viewer habits, keeping the overall vibe warm, magnetic, and creator-friendly.
+            """.trimIndent()
+
+            else -> "Infuse creative creator comedy into this script: $toolName"
+        }
+
+        val systemInstruction = """
+            You are ScriptForge AI's Creator Fun Zone comedy director.
+            Language: $language
+            Task: $instruction
+            Do not make serious educational content inappropriate or offensive.
+            Deliver clean, high-retention creator humor that viewers love to share.
+        """.trimIndent()
+
+        val prompt = "Creator's Script Content:\n$currentScript\n\nGenerate the comedy enhancement:"
+        return executeGeminiPrompt(prompt, systemInstruction)
+    }
+
     // 5. Generate Hooks (8 Types)
     suspend fun generateHooks(scriptOrIdea: String, videoType: String, language: String): Result<List<HookItem>> {
         val prompt = """

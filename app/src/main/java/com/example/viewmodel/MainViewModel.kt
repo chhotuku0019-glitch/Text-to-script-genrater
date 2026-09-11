@@ -97,6 +97,14 @@ class MainViewModel : ViewModel() {
 
     private var autoSaveJob: Job? = null
 
+    // Fun & Meme Creator Tool Output: Pair(ToolName, GeneratedText)
+    private val _funnyToolResult = MutableStateFlow<Pair<String, String>?>(null)
+    val funnyToolResult: StateFlow<Pair<String, String>?> = _funnyToolResult.asStateFlow()
+
+    fun clearFunnyToolResult() {
+        _funnyToolResult.value = null
+    }
+
     // Teleprompter Control
     val isTeleprompterPlaying = MutableStateFlow(false)
     val teleprompterSpeed = MutableStateFlow(preferences.teleprompterSpeed)
@@ -303,19 +311,106 @@ class MainViewModel : ViewModel() {
 
     // --- Gemini AI Operations ---
 
-    fun cleanTranscriptAi(projectId: Long, rawTranscript: String, language: String) {
+    fun cleanTranscriptAi(
+        projectId: Long,
+        rawTranscript: String,
+        language: String,
+        autoOpenEditor: Boolean = false,
+        onSuccess: ((String, Long) -> Unit)? = null
+    ) {
         viewModelScope.launch {
             _isAiLoading.value = true
             _aiStatusMessage.value = "AI is cleaning transcript and removing filler words..."
             val result = geminiService.cleanTranscript(rawTranscript, language)
             _isAiLoading.value = false
             result.onSuccess { cleanText ->
-                val project = repository.getProjectById(projectId) ?: return@onSuccess
-                repository.updateProject(project.copy(cleanTranscript = cleanText))
-                showMessage("Transcript cleaned successfully!")
+                var targetId = projectId
+                if (targetId <= 0L) {
+                    // Create new project for this voice recording
+                    targetId = repository.createProject(
+                        title = "Voice Script: ${cleanText.take(28).trim()}...",
+                        videoType = "Tutorial",
+                        language = language,
+                        targetDuration = "5 min",
+                        tone = "Conversational",
+                        targetAudience = "YouTube Audience",
+                        tags = "Voice, YouTube",
+                        ideaText = cleanText
+                    )
+                    val newProj = repository.getProjectById(targetId)
+                    if (newProj != null) {
+                        repository.updateProject(
+                            newProj.copy(
+                                rawTranscript = rawTranscript,
+                                cleanTranscript = cleanText,
+                                currentScript = cleanText
+                            )
+                        )
+                        repository.saveVersion(targetId, "Clean Spoken Transcript", "Initial voice cleaned version")
+                    }
+                } else {
+                    val project = repository.getProjectById(targetId)
+                    if (project != null) {
+                        val updatedScript = if (project.currentScript.isBlank()) cleanText else project.currentScript
+                        repository.updateProject(project.copy(
+                            rawTranscript = if (rawTranscript.isNotBlank()) rawTranscript else project.rawTranscript,
+                            cleanTranscript = cleanText,
+                            currentScript = updatedScript
+                        ))
+                    }
+                }
+
+                _activeProjectId.value = targetId
+                showMessage("✨ Transcript cleaned & saved! Opening Script Editor...")
+
+                if (autoOpenEditor) {
+                    navigateTo(Screen.ProjectWorkspace(targetId, initialTab = 2))
+                }
+                onSuccess?.invoke(cleanText, targetId)
             }.onFailure { err ->
                 showMessage("Cleaning failed: ${err.localizedMessage ?: "Unknown error"}. Your raw transcript is safe.")
             }
+        }
+    }
+
+    fun applyFunCreatorToolAi(projectId: Long, toolName: String) {
+        viewModelScope.launch {
+            val project = repository.getProjectById(projectId) ?: return@launch
+            val scriptContent = project.currentScript.ifEmpty { project.cleanTranscript.ifEmpty { project.ideaText } }
+            if (scriptContent.isBlank()) {
+                showMessage("Provide or write a script first before running $toolName.")
+                return@launch
+            }
+
+            _isAiLoading.value = true
+            _aiStatusMessage.value = "Generating $toolName in Creator Fun Zone..."
+            val result = geminiService.applyFunTool(
+                toolName = toolName,
+                currentScript = scriptContent,
+                language = project.language
+            )
+            _isAiLoading.value = false
+            result.onSuccess { generatedResult ->
+                _funnyToolResult.value = Pair(toolName, generatedResult)
+                showMessage("🎭 $toolName generated! Review or apply below.")
+            }.onFailure { err ->
+                showMessage("Creator tool failed: ${err.localizedMessage ?: "Error"}")
+            }
+        }
+    }
+
+    fun applyFunnyResultToScript(projectId: Long, toolName: String, newContent: String, replaceAll: Boolean = false) {
+        viewModelScope.launch {
+            val project = repository.getProjectById(projectId) ?: return@launch
+            repository.saveVersion(projectId, "Pre-$toolName Script", "Auto backup before applying $toolName")
+            val updatedScript = if (replaceAll || project.currentScript.isBlank()) {
+                newContent
+            } else {
+                "${project.currentScript}\n\n// --- [$toolName Edition] ---\n$newContent"
+            }
+            repository.updateProject(project.copy(currentScript = updatedScript))
+            _funnyToolResult.value = null
+            showMessage("✅ $toolName applied to Script Editor! (Previous version backed up in History)")
         }
     }
 
